@@ -15,6 +15,14 @@ class Board
     @board.count
   end
 
+  def square(board, row, col)
+    if row >= 0 && col >= 0 && board[row] && board[row][col] && board[row][col] != @space
+      board[row][col]
+    else
+      false
+    end
+  end
+
   def add_down(word, board, words, pos = nil)
     length = word.length
     possible = []
@@ -23,14 +31,15 @@ class Board
         cross = []
         valid = length.times.inject(true) do |r, l|
           pos = 1 + (row - length) + l
-          cross << [pos, col] if (pos >= 0 && board[pos] && word[l] == board[pos][col])
-          test = (pos < 0 || board[pos].nil? || board[pos][col] == @space || board[pos][col] == word[l])
+          char = square(board, pos, col)
+          cross << [pos, col] if char == word[l]
+          test = (!char || char == word[l])
           r & test
         end
 
         start = 1 + (row - length)
-        bookend = (start - 1 < 0 || board[start - 1][col] == @space) & (row + 1 >= height || board[row + 1][col] == @space)
-        possible << {pos: [start, col], cross: cross } if valid & cross.first & bookend
+        bookend = (!square(board, start - 1, col) && !square(board, row + 1, col))
+        possible << {pos: [start, col], cross: cross } if (valid && cross.first && bookend)
       end
     end
 
@@ -50,7 +59,7 @@ class Board
         valid = length.times.inject(true) do |r, l|
           pos = 1 + (col - length) + l
           cross << [row, pos] if (pos >= 0 && word[l] == board[row][pos])
-          test = (pos < 0 || board[row][pos].nil? || board[row][pos] == @space || board[row][pos] == word[l])
+          test = (pos < 0 || !square(board, row, pos) || board[row][pos] == word[l])
           r & test
         end
 
@@ -70,20 +79,43 @@ class Board
   def look_down_around(word, board, words, pos, cross)
     valid = true
     if words.first
-      dp, ap = pos
-      word.chars.each_with_index do |c, i|
-        cur_pos = [dp + i, ap]
+      row, col = pos
+      word.chars.each_with_index do |c, ci|
+        cur_pos = [row + ci, col]
         next if cross.include? cur_pos
-        #left = (board[dp + i] & board[dp + i][ap - 1]) ? board[dp + i][ap - 1] : nil
-        #right = (board[dp + i] & board[dp + i][ap - 1]) ? board[dp + i][ap + 1] : nil
 
-        #if left || right
-        #  subword = [left, c, right]
-        #  pos_words = words.select {|w| w.include?(subword)}
-        #end
+        left_col = col
+        left = ""
+        loop do
+          left_col -= 1
+          lchar = square(board, row + ci, left_col)
+          left << lchar if lchar && lchar != @space
+          break unless lchar
+        end
+
+        right_col = col
+        right = ""
+        loop do
+          right_col += 1
+          rchar = square(board, row + ci, right_col)
+          right << rchar if rchar
+          break unless rchar
+        end
+
+        if left || right
+          subword = [left, c, right].compact.join('')
+          words.each_with_index do |w, wi|
+            if si = w.index(subword)
+              w_pos = [row + ci, col - (si + left.length)]
+              d_words = words.dup
+              d_words.delete_at(wi)
+              add_across(w, board, d_words, w_pos)
+              # got to here last
+            end
+          end
+        end
       end
     end
-
     valid
   end
 

@@ -3,7 +3,7 @@ require_relative 'board'
 
 words = Words.list
 board = Board.new(Words.list, '_')
-board.generate(1000)
+board.generate(10)
 board.print
 
 
