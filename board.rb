@@ -1,8 +1,8 @@
 class Board
 
-  def initialize(words, space_char = "\u{2588}")
+  def initialize(words, space_char = "\u{2588}", board = nil)
     @words = words
-    @board = [@words.pop]
+    @board = board || [@words.pop]
     @space = space_char
   end
 
@@ -15,67 +15,99 @@ class Board
     @board.count
   end
 
-  def add_down(w)
-    length = w.length
+  def add_down(word, board, words, pos = nil)
+    length = word.length
     possible = []
-    width.times do |a|
-      (height + length - 1).times do |d|
-        cross = false
+    width.times do |col|
+      (height + length - 1).times do |row|
+        cross = []
         valid = length.times.inject(true) do |r, l|
-          pos = 1 + (d - length) + l
-          cross = cross || (pos >= 0 && @board[pos] && w[l] == @board[pos][a])
-          test = (pos < 0 || @board[pos].nil? || @board[pos][a] == @space || @board[pos][a] == w[l])
+          pos = 1 + (row - length) + l
+          cross << [pos, col] if (pos >= 0 && board[pos] && word[l] == board[pos][col])
+          test = (pos < 0 || board[pos].nil? || board[pos][col] == @space || board[pos][col] == word[l])
           r & test
         end
 
-        start = 1 + (d - length)
-        bookend = (start - 1 < 0 || @board[start - 1][a] == @space) & (d + 1 >= height || @board[d + 1][a] == @space)
-        possible << [start, a] if valid & cross & bookend
+        start = 1 + (row - length)
+        bookend = (start - 1 < 0 || board[start - 1][col] == @space) & (row + 1 >= height || board[row + 1][col] == @space)
+        possible << {pos: [start, col], cross: cross } if valid & cross.first & bookend
       end
     end
 
-    pos = possible.shuffle.first
-    if pos
-      write_down(w, pos)
-      true
-    else
-      false
+    position = possible.shuffle.detect do |_pos|
+      look_down_around(word, board, words, _pos[:pos], _pos[:cross])
     end
+
+    position ? write_down(word, board, position[:pos]) : false
   end
 
-  def add_across(w)
-    length = w.length
+  def add_across(word, board, words, pos = nil)
+    length = word.length
     possible = []
-    height.times do |d|
-      (width + length - 1).times do |a|
-        cross = false
+    height.times do |row|
+      (width + length - 1).times do |col|
+        cross = []
         valid = length.times.inject(true) do |r, l|
-          pos = 1 + (a - length) + l
-          cross = cross || (pos >= 0 && w[l] == @board[d][pos])
-          test = (pos < 0 || @board[d][pos].nil? || @board[d][pos] == @space || @board[d][pos] == w[l])
+          pos = 1 + (col - length) + l
+          cross << [row, pos] if (pos >= 0 && word[l] == board[row][pos])
+          test = (pos < 0 || board[row][pos].nil? || board[row][pos] == @space || board[row][pos] == word[l])
           r & test
         end
 
-        start = 1 + (a - length)
-        bookend = (start - 1 < 0 || @board[d][start - 1] == @space) & (a + 1 >= width || @board[d][a + 1] == @space)
-        possible << [d, start] if valid & cross & bookend
+        start = 1 + (col - length)
+        bookend = (start - 1 < 0 || board[row][start - 1] == @space) & (col + 1 >= width || board[row][col + 1] == @space)
+        possible << {pos: [row, start], cross: cross} if valid & cross.first & bookend
       end
     end
-    pos = possible.shuffle.first
-    if pos
-      write_across(w, pos)
-      true
-    else
-      false
+
+    position = possible.shuffle.detect do |_pos|
+      look_across_around(word, board, words, _pos[:pos], _pos[:cross])
     end
+
+    position ? write_across(word, board, position[:pos]) : false
   end
 
-  def write_across(word, pos)
+  def look_down_around(word, board, words, pos, cross)
+    valid = true
+    if words.first
+      dp, ap = pos
+      word.chars.each_with_index do |c, i|
+        cur_pos = [dp + i, ap]
+        next if cross.include? cur_pos
+        #left = (board[dp + i] & board[dp + i][ap - 1]) ? board[dp + i][ap - 1] : nil
+        #right = (board[dp + i] & board[dp + i][ap - 1]) ? board[dp + i][ap + 1] : nil
+
+        #if left || right
+        #  subword = [left, c, right]
+        #  pos_words = words.select {|w| w.include?(subword)}
+        #end
+      end
+    end
+
+    valid
+  end
+
+  def look_across_around(word, board, words, pos, cross)
+    valid = true
+    if words.first
+      dp, ap = pos
+      word.chars.each_with_index do |c, i|
+        cur_pos = [dp, ap + i]
+        next if cross.include? cur_pos
+
+      end
+    end
+
+    valid
+  end
+
+
+  def write_across(word, board, pos)
     dp, ap = pos
     length = word.length
 
     if ap < 0
-      @board = @board.map do |row|
+      board = board.map do |row|
         row.rjust(ap.abs + width, @space)
       end
       ap = 0
@@ -83,29 +115,33 @@ class Board
 
     ep = ap + length - 1
     if ep > width
-      @board = @board.map do |row|
+      board = board.map do |row|
         row.ljust(ep + 1, @space)
       end
       ep = width - 1
     end
 
-    @board[dp][ap..ep] = word
+    board[dp][ap..ep] = word
+
+    board
   end
 
-  def write_down(word, pos)
+  def write_down(word, board, pos)
     dp, ap = pos
 
     if dp < 0
       dp.abs.times do
-        @board.unshift @space * width
+        board.unshift @space * width
       end
       dp = 0
     end
 
     word.chars.each_with_index do |char, i|
-      @board.push @space * width if @board[dp + i].nil?
-      @board[dp + i][ap] = char
+      board.push @space * width if board[dp + i].nil?
+      board[dp + i][ap] = char
     end
+
+    board
   end
 
   def generate(iter = 10)
@@ -115,9 +151,11 @@ class Board
       coin = (rand.round == 0 ? :heads : :tails)
 
       if coin == :heads
-        add_down(w) || add_across(w) || @words.push(w)
+        b = add_down(w, @board, @words) || add_across(w, @board, @words)
+        b ? @board = b : @words.push(w)
       else
-        add_across(w) || add_down(w) || @words.push(w)
+        b = add_across(w, @board, @words) || add_down(w, @board, @words)
+        b ? @board = b : @words.push(w)
       end
 
       break if @words.first.nil?
